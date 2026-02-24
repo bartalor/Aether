@@ -2,6 +2,7 @@
 
 add_library(aether SHARED
     shm.cpp
+    publish.cpp
 )
 
 # -lrt is required on Linux for shm_open() and shm_unlink().
