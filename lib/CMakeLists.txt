@@ -1,2 +1,9 @@
 # libaether — client library (publisher + subscriber API)
-# Sources will be added here as we build them
+
+add_library(aether SHARED
+    shm.cpp
+)
+
+# -lrt is required on Linux for shm_open() and shm_unlink().
+# These live in the POSIX realtime extensions library, not libc.
+target_link_libraries(aether PRIVATE rt)
