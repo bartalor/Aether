@@ -1,2 +1,4 @@
 # aetherd — broker daemon
-# Sources will be added here as we build them
+
+add_executable(aetherd main.cpp)
+target_link_libraries(aetherd PRIVATE aether rt)
