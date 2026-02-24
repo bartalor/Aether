@@ -70,22 +70,26 @@ RingHeader* shm_create(const char* name, uint32_t capacity) {
 
     // Construct the RingHeader in place using placement new.
     // The memory already exists (mmap'd) — we just need to initialise it.
+    // write_seq starts at 1, not 0.
+    // All slot sequences are initialised to 0.
+    // This means an unwritten slot always has sequence 0 < read_seq (which also
+    // starts at 1), so consume() correctly returns Empty for unwritten slots.
+    // If we used write_seq=0 and slot[i].sequence=i, then slot[1].sequence=1
+    // would be indistinguishable from "published once" when read_seq=1.
     new (hdr) RingHeader{
         .magic    = RING_MAGIC,
         .version  = RING_VERSION,
         .capacity = capacity,
-        .write_seq = 0,         // producer starts at sequence 0
+        .write_seq = 1,         // first published message will have sequence 1
     };
 
-    // Initialise each slot's sequence number to its index.
-    // A subscriber waiting for sequence N polls slot[N % capacity] and checks
-    // slot.sequence == N. Setting sequence = i means: "not yet written".
-    // If we left it uninitialised, a subscriber might see garbage and think
-    // a message is ready when it isn't.
-    Slot* slots = reinterpret_cast<Slot*>(hdr + 1); // slots start right after the header
+    // All slot sequences initialised to 0 = "never written".
+    // Consumers start their read_seq at 1 (= initial write_seq), so they
+    // always see 0 < read_seq for unwritten slots → Empty.
+    Slot* slots = reinterpret_cast<Slot*>(hdr + 1);
     for (uint32_t i = 0; i < capacity; ++i) {
-        new (&slots[i]) Slot{};           // default-construct (zeroes payload_len, data)
-        slots[i].sequence.store(i, std::memory_order_relaxed);
+        new (&slots[i]) Slot{};
+        slots[i].sequence.store(0, std::memory_order_relaxed);
     }
 
     return hdr;
