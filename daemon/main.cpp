@@ -1,10 +1,9 @@
 #include "acceptor.h"
-#include "aether/shm.h"
+#include "topic_registry.h"
 
 #include <csignal>   // sigaction, sig_atomic_t
-#include <cstdio>    // fprintf, printf
+#include <cstdio>    // fprintf
 #include <cstdlib>   // EXIT_FAILURE
-#include <sys/mman.h> // shm_unlink
 #include <unistd.h>  // sleep
 
 // ---------------------------------------------------------------------------
@@ -42,24 +41,8 @@ static bool install_signal_handlers() {
 }
 
 // ---------------------------------------------------------------------------
-// Stats dump
-// ---------------------------------------------------------------------------
-
-static void dump_stats(aether::RingHeader* hdr) {
-    // write_seq - 1 = total messages published since startup.
-    // (write_seq starts at 1, so subtract 1 to get the count.)
-    const uint64_t total = hdr->write_seq.load(std::memory_order_relaxed) - 1;
-    printf("[aetherd] stats: capacity=%u  messages_published=%llu\n",
-           hdr->capacity,
-           static_cast<unsigned long long>(total));
-}
-
-// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-
-static constexpr const char* SHM_NAME = "/aetherd-default";
-static constexpr uint32_t    CAPACITY = 1024; // number of ring buffer slots
 
 int main() {
     fprintf(stderr, "[aetherd] starting\n");
@@ -69,16 +52,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    // Clean up any leftover segment from a previous crash before creating a new one.
-    shm_unlink(SHM_NAME);
-
-    aether::RingHeader* hdr = aether::shm_create(SHM_NAME, CAPACITY);
-    if (hdr == nullptr) {
-        fprintf(stderr, "[aetherd] failed to create shared memory segment\n");
-        return EXIT_FAILURE;
-    }
-
-    fprintf(stderr, "[aetherd] ready (shm=%s capacity=%u)\n", SHM_NAME, CAPACITY);
+    fprintf(stderr, "[aetherd] ready\n");
 
     start_acceptor();
 
@@ -88,7 +62,7 @@ int main() {
     while (!g_shutdown) {
         if (g_dump_stats) {
             g_dump_stats = 0; // clear before acting — avoids re-triggering
-            dump_stats(hdr);
+            dump_all_topic_stats();
         }
 
         sleep(1); // placeholder — threads will replace this when we add them
@@ -100,8 +74,7 @@ int main() {
     fprintf(stderr, "[aetherd] shutting down\n");
 
     stop_acceptor();
-    aether::shm_detach(hdr);
-    aether::shm_destroy(SHM_NAME);
+    destroy_all_topics();
 
     fprintf(stderr, "[aetherd] bye\n");
     return 0;

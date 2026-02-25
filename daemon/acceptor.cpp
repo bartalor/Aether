@@ -1,4 +1,5 @@
 #include "acceptor.h"
+#include "topic_registry.h"
 #include "aether/control.h"
 
 #include <sys/socket.h>  // socket, bind, listen, accept
@@ -25,12 +26,15 @@ static void handle_client(int client_fd) {
         return;
     }
 
-    // Stub: topic management not yet implemented.
-    // Always respond Ok with a placeholder shm name.
     aether::SubscribeResponse resp{};
-    resp.status   = aether::ControlStatus::Ok;
-    resp.capacity = 1024;
-    std::strncpy(resp.shm_name, "/aetherd-default", aether::MAX_SHM_NAME_LEN - 1);
+    const TopicInfo* topic = get_or_create_topic(req.topic, req.topic_len);
+    if (topic == nullptr) {
+        resp.status = aether::ControlStatus::InternalError;
+    } else {
+        resp.status   = aether::ControlStatus::Ok;
+        resp.capacity = topic->hdr->capacity;
+        std::strncpy(resp.shm_name, topic->shm_name, aether::MAX_SHM_NAME_LEN - 1);
+    }
 
     write(client_fd, &resp, sizeof(resp));
     close(client_fd);
@@ -87,7 +91,8 @@ void start_acceptor() {
 
 void stop_acceptor() {
     if (g_listen_fd >= 0) {
-        close(g_listen_fd); // unblocks accept() in the acceptor thread
+        shutdown(g_listen_fd, SHUT_RDWR); // unblocks accept() reliably
+        close(g_listen_fd);
         g_listen_fd = -1;
     }
     if (g_acceptor_thread.joinable()) {
