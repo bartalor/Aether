@@ -1,9 +1,10 @@
+#include "acceptor.h"
 #include "aether/shm.h"
 
-#include <sys/mman.h> // shm_unlink
 #include <csignal>   // sigaction, sig_atomic_t
 #include <cstdio>    // fprintf, printf
 #include <cstdlib>   // EXIT_FAILURE
+#include <sys/mman.h> // shm_unlink
 #include <unistd.h>  // sleep
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,8 @@ int main() {
 
     fprintf(stderr, "[aetherd] ready (shm=%s capacity=%u)\n", SHM_NAME, CAPACITY);
 
+    start_acceptor();
+
     // ---------------------------------------------------------------------------
     // Main loop — runs until SIGTERM is received
     // ---------------------------------------------------------------------------
@@ -96,6 +99,7 @@ int main() {
     // ---------------------------------------------------------------------------
     fprintf(stderr, "[aetherd] shutting down\n");
 
+    stop_acceptor();
     aether::shm_detach(hdr);
     aether::shm_destroy(SHM_NAME);
 
