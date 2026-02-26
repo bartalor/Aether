@@ -1,9 +1,13 @@
+
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
 #include "aether/control.h"
 #include "aether/shm.h"
 #include "aether/ring.h"
+#include "aether/subscribe.h"
+#include "aether/publish.h"
+#include "aether/consume.h"
 
 #include <fcntl.h>       // open, O_WRONLY
 #include <sys/socket.h>
@@ -122,4 +126,24 @@ TEST_CASE_FIXTURE(DaemonFixture, "shm_attach succeeds with returned shm_name") {
     REQUIRE(hdr != nullptr);
     CHECK(hdr->capacity == 1024);
     aether::shm_detach(hdr);
+}
+
+TEST_CASE_FIXTURE(DaemonFixture, "end-to-end: publish and consume a message") {
+    aether::Subscription sub = aether::subscribe("prices", 6);
+    REQUIRE(sub.hdr != nullptr);
+
+    const char msg[] = "hello aether";
+    bool ok = aether::publish(sub.hdr, msg, sizeof(msg));
+    REQUIRE(ok);
+
+    char buf[64]{};
+    uint32_t buf_len = sizeof(buf);
+    uint64_t read_seq = 1;
+
+    aether::ConsumeResult result = aether::consume(sub.hdr, buf, buf_len, read_seq);
+    REQUIRE(result == aether::ConsumeResult::Ok);
+    CHECK(buf_len == sizeof(msg));
+    CHECK(strcmp(buf, "hello aether") == 0);
+
+    aether::unsubscribe(sub);
 }
