@@ -15,7 +15,6 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <cstring>
 
 #include <cstdio>
 #include <cstdlib>
