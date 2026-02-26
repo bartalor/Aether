@@ -44,8 +44,7 @@ const TopicInfo* get_or_create_topic(const char* name, uint32_t name_len) {
     fprintf(stderr, "[topic_registry] created topic '%.*s' -> %s\n",
             static_cast<int>(name_len), name, info.shm_name);
 
-    auto [iter, inserted] = g_topics.emplace(key, info);
-    (void)inserted;
+    auto iter = g_topics.emplace(key, info).first;
     return &iter->second;
 }
 
