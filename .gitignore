@@ -16,6 +16,9 @@ cmake-build-*/
 # Claude Code session data
 .claude/
 
+# Benchmark reports — local artifacts, never commit
+reports/
+
 # CMake generated
 CMakeCache.txt
 CMakeFiles/

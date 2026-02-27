@@ -14,8 +14,13 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # Shared include directory (public headers used across all components)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
+# Generate version header from CMakeLists.txt VERSION field
+configure_file(cmake/version.h.in ${PROJECT_BINARY_DIR}/include/aether/version.h)
+include_directories(${PROJECT_BINARY_DIR}/include)
+
 # Components
 add_subdirectory(lib)
 add_subdirectory(daemon)
 add_subdirectory(cli)
 add_subdirectory(tests)
+add_subdirectory(bench)
