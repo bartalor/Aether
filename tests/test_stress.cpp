@@ -2,25 +2,18 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
-#include "aether/control.h"
 #include "aether/subscribe.h"
 #include "aether/publish.h"
 #include "aether/consume.h"
 
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 #include <algorithm>
 #include <array>
-#include <cstdio>
-#include <cstdlib>
 #include <climits>
 
-#ifndef AETHERD_PATH
-#error "AETHERD_PATH must be defined by CMake"
-#endif
+#include "daemon_fixture.h"
 
 // ---------------------------------------------------------------------------
 // Message layout embedded in the ring buffer payload
@@ -39,43 +32,6 @@ constexpr int     N_PUBLISHERS       = 4;
 constexpr int     MSGS_PER_PUBLISHER = 200;
 constexpr int     TOTAL_MSGS         = N_PUBLISHERS * MSGS_PER_PUBLISHER; // 800 < capacity 1024
 constexpr int     MAX_SPIN           = TOTAL_MSGS * 1000; // safety: bail if stuck
-
-// ---------------------------------------------------------------------------
-// DaemonFixture (same as test_control.cpp)
-// ---------------------------------------------------------------------------
-
-static void wait_for_socket() {
-    for (int i = 0; i < 50; ++i) {
-        struct stat st{};
-        if (stat(aether::DAEMON_SOCKET_PATH, &st) == 0) return;
-        usleep(100'000);
-    }
-    fprintf(stderr, "timeout waiting for daemon socket\n");
-    std::abort();
-}
-
-struct DaemonFixture {
-    pid_t pid;
-
-    DaemonFixture() {
-        unlink(aether::DAEMON_SOCKET_PATH);
-        pid = fork();
-        if (pid == 0) {
-            int devnull = open("/dev/null", O_WRONLY);
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
-            execl(AETHERD_PATH, "aetherd", nullptr);
-            _exit(1);
-        }
-        if (pid < 0) { perror("fork"); std::abort(); }
-        wait_for_socket();
-    }
-
-    ~DaemonFixture() {
-        kill(pid, SIGTERM);
-        waitpid(pid, nullptr, 0);
-    }
-};
 
 // ---------------------------------------------------------------------------
 // Stress test

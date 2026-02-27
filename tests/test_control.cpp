@@ -9,34 +9,19 @@
 #include "aether/publish.h"
 #include "aether/consume.h"
 
-#include <fcntl.h>       // open, O_WRONLY
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/un.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-#ifndef AETHERD_PATH
-#error "AETHERD_PATH must be defined by CMake"
-#endif
+#include "daemon_fixture.h"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-static void wait_for_socket() {
-    for (int i = 0; i < 50; ++i) {
-        struct stat st{};
-        if (stat(aether::DAEMON_SOCKET_PATH, &st) == 0) return;
-        usleep(100'000); // 100ms per attempt, 5s total
-    }
-    fprintf(stderr, "timeout waiting for daemon socket\n");
-    std::abort();
-}
 
 static aether::SubscribeResponse do_subscribe(const char* topic) {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -59,37 +44,6 @@ static aether::SubscribeResponse do_subscribe(const char* topic) {
     close(fd);
     return resp;
 }
-
-// ---------------------------------------------------------------------------
-// Fixture: starts a fresh daemon before each test, stops it after.
-// Each test gets a clean slate — no leftover topics.
-// ---------------------------------------------------------------------------
-
-struct DaemonFixture {
-    pid_t pid;
-
-    DaemonFixture() {
-        unlink(aether::DAEMON_SOCKET_PATH); // remove stale socket if any
-
-        pid = fork();
-        if (pid == 0) {
-            // Suppress daemon log output during tests
-            int devnull = open("/dev/null", O_WRONLY);
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
-            execl(AETHERD_PATH, "aetherd", nullptr);
-            _exit(1);
-        }
-        if (pid < 0) { perror("fork"); std::abort(); }
-        wait_for_socket();
-    }
-
-    ~DaemonFixture() {
-        kill(pid, SIGTERM);
-        waitpid(pid, nullptr, 0);
-        // daemon calls destroy_all_topics() on shutdown — shm cleaned up
-    }
-};
 
 // ---------------------------------------------------------------------------
 // Tests
