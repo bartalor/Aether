@@ -1,10 +1,9 @@
 #include "aether/subscribe.h"
 #include "aether/publish.h"
 #include "aether/consume.h"
-#include "aether/control.h"
+#include "bench_common.h"
 #include "report.h"
 
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -25,20 +24,6 @@ struct Msg {
 };
 
 // ---------------------------------------------------------------------------
-// Results passed from subscriber child to parent via pipe
-// ---------------------------------------------------------------------------
-
-struct LatencyResults {
-    uint64_t samples;
-    uint64_t min_ns;
-    uint64_t p50_ns;
-    uint64_t p99_ns;
-    uint64_t p99_9_ns;
-    uint64_t p99_99_ns;
-    uint64_t max_ns;
-};
-
-// ---------------------------------------------------------------------------
 // Timing
 // ---------------------------------------------------------------------------
 
@@ -47,30 +32,6 @@ static uint64_t now_ns() {
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
     return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ULL
          + static_cast<uint64_t>(ts.tv_nsec);
-}
-
-// ---------------------------------------------------------------------------
-// Daemon lifecycle
-// ---------------------------------------------------------------------------
-
-static pid_t start_daemon() {
-    unlink(aether::DAEMON_SOCKET_PATH);
-    pid_t pid = fork();
-    if (pid < 0) { perror("fork daemon"); std::abort(); }
-    if (pid == 0) {
-        int devnull = open("/dev/null", O_WRONLY);
-        dup2(devnull, STDERR_FILENO);
-        close(devnull);
-        execl(AETHERD_PATH, "aetherd", nullptr);
-        _exit(1);
-    }
-    for (int i = 0; i < 50; ++i) {
-        struct stat st{};
-        if (stat(aether::DAEMON_SOCKET_PATH, &st) == 0) return pid;
-        usleep(100'000);
-    }
-    fprintf(stderr, "timeout waiting for daemon socket\n");
-    std::abort();
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +53,8 @@ static uint64_t percentile(const std::vector<uint64_t>& sorted, double p) {
 // Main
 // ---------------------------------------------------------------------------
 
-int main() {
+int main(int argc, char* argv[]) {
+    const BenchArgs args = parse_bench_args(argc, argv);
     pid_t daemon_pid = start_daemon();
 
     int ready_pipe[2];
@@ -216,30 +178,7 @@ int main() {
     printf("p99.99   : %llu ns\n", (unsigned long long)res.p99_99_ns);
     printf("max      : %llu ns\n", (unsigned long long)res.max_ns);
 
-    // ---------------------------------------------------------------
-    // Write CSV row
-    // ---------------------------------------------------------------
-    FILE* f = open_report_csv(
-        "bench_latency.csv",
-        "timestamp,aether_version,ring_version,samples,"
-        "min_ns,p50_ns,p99_ns,p99_9_ns,p99_99_ns,max_ns"
-    );
-    if (f) {
-        char ts[32];
-        fill_timestamp(ts, sizeof(ts));
-        fprintf(f, "%s,%s,%u,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
-                ts,
-                AETHER_VERSION_STRING,
-                aether::RING_VERSION,
-                (unsigned long long)res.samples,
-                (unsigned long long)res.min_ns,
-                (unsigned long long)res.p50_ns,
-                (unsigned long long)res.p99_ns,
-                (unsigned long long)res.p99_9_ns,
-                (unsigned long long)res.p99_99_ns,
-                (unsigned long long)res.max_ns);
-        fclose(f);
-    }
+    write_latency_report(args, res);
 
     return 0;
 }

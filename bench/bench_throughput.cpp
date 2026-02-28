@@ -1,10 +1,9 @@
 #include "aether/subscribe.h"
 #include "aether/publish.h"
 #include "aether/consume.h"
-#include "aether/control.h"
+#include "bench_common.h"
 #include "report.h"
 
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -22,17 +21,6 @@ struct Msg {
 };
 
 // ---------------------------------------------------------------------------
-// Results passed from subscriber child to parent via pipe
-// ---------------------------------------------------------------------------
-
-struct ThroughputResults {
-    uint64_t received;
-    uint64_t lapped;
-    double   elapsed_s;
-    double   rate_mmps;  // M msgs/s
-};
-
-// ---------------------------------------------------------------------------
 // Timing
 // ---------------------------------------------------------------------------
 
@@ -41,30 +29,6 @@ static uint64_t now_ns() {
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
     return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ULL
          + static_cast<uint64_t>(ts.tv_nsec);
-}
-
-// ---------------------------------------------------------------------------
-// Daemon lifecycle
-// ---------------------------------------------------------------------------
-
-static pid_t start_daemon() {
-    unlink(aether::DAEMON_SOCKET_PATH);
-    pid_t pid = fork();
-    if (pid < 0) { perror("fork daemon"); std::abort(); }
-    if (pid == 0) {
-        int devnull = open("/dev/null", O_WRONLY);
-        dup2(devnull, STDERR_FILENO);
-        close(devnull);
-        execl(AETHERD_PATH, "aetherd", nullptr);
-        _exit(1);
-    }
-    for (int i = 0; i < 50; ++i) {
-        struct stat st{};
-        if (stat(aether::DAEMON_SOCKET_PATH, &st) == 0) return pid;
-        usleep(100'000);
-    }
-    fprintf(stderr, "timeout waiting for daemon socket\n");
-    std::abort();
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +47,8 @@ static constexpr uint64_t BENCH_DURATION_NS = 5ULL * 1'000'000'000ULL;  // 5 s
 // Main
 // ---------------------------------------------------------------------------
 
-int main() {
+int main(int argc, char* argv[]) {
+    const BenchArgs args = parse_bench_args(argc, argv);
     pid_t daemon_pid = start_daemon();
 
     int ready_pipe[2];
@@ -153,7 +118,7 @@ int main() {
         aether::unsubscribe(sub);
         close(done_pipe[0]);
 
-        ThroughputResults res{};
+        ThroughputSubResults res{};
         res.received  = received;
         res.lapped    = lapped;
         res.elapsed_s = static_cast<double>(t_end - t_start) / 1e9;
@@ -193,7 +158,7 @@ int main() {
     close(done_pipe[1]);
 
     // Collect results from subscriber
-    ThroughputResults sub_res{};
+    ThroughputSubResults sub_res{};
     read(results_pipe[0], &sub_res, sizeof(sub_res));
     close(results_pipe[0]);
 
@@ -216,31 +181,11 @@ int main() {
     printf("sub elapsed  : %.3f s\n",        sub_res.elapsed_s);
     printf("sub rate     : %.2f M msgs/s\n", sub_res.rate_mmps);
 
-    // ---------------------------------------------------------------
-    // Write CSV row
-    // ---------------------------------------------------------------
-    FILE* f = open_report_csv(
-        "bench_throughput.csv",
-        "timestamp,aether_version,ring_version,"
-        "pub_sent,pub_elapsed_s,pub_rate_mmps,"
-        "sub_received,sub_lapped,sub_elapsed_s,sub_rate_mmps"
-    );
-    if (f) {
-        char ts[32];
-        fill_timestamp(ts, sizeof(ts));
-        fprintf(f, "%s,%s,%u,%llu,%.3f,%.2f,%llu,%llu,%.3f,%.2f\n",
-                ts,
-                AETHER_VERSION_STRING,
-                aether::RING_VERSION,
-                (unsigned long long)seq,
-                pub_elapsed_s,
-                pub_rate_mmps,
-                (unsigned long long)sub_res.received,
-                (unsigned long long)sub_res.lapped,
-                sub_res.elapsed_s,
-                sub_res.rate_mmps);
-        fclose(f);
-    }
+    const ThroughputResults report{
+        seq, pub_elapsed_s, pub_rate_mmps,
+        sub_res.received, sub_res.lapped, sub_res.elapsed_s, sub_res.rate_mmps
+    };
+    write_throughput_report(args, report);
 
     return 0;
 }
