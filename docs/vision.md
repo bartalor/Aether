@@ -36,9 +36,15 @@ the bridge is a separate process that subscribes locally and republishes remotel
 
 ## Roadmap
 
-1. Complete the happy path — client API, end-to-end pub/sub working
-2. Benchmarks — real numbers, repeatable, tracked over time
+1. ~~Complete the happy path — client API, end-to-end pub/sub working~~ **done**
+2. ~~Benchmarks — real numbers, repeatable, tracked over time~~ **done**
+   - Transport-agnostic harness (modelled after Aeron's `LoadTestRig` / `MessageTransceiver`)
+   - `AetherTransport` adapter; harness ready for additional transports
 3. Lock-free multi-producer — CAS-based ring buffer for concurrent publishers
-4. Observability — eBPF probes, per-topic latency histograms, metrics endpoint
-5. Persistence / WAL — optional replay of missed messages (Kafka concept, opt-in)
-6. Network bridge — forward topics to a remote broker instance over TCP/RDMA
+   - Precondition for fair comparison against Aeron (which is multi-producer by design)
+4. Aeron comparison — `aether-benchmarks` companion repo, `AeronTransport` adapter
+   - Separate repo so Aeron is never a dependency of the main project
+   - Apples-to-apples: same harness, same methodology, both lock-free IPC
+5. Observability — eBPF probes, per-topic latency histograms, metrics endpoint
+6. Persistence / WAL — optional replay of missed messages (Kafka concept, opt-in)
+7. Network bridge — forward topics to a remote broker instance over TCP/RDMA
