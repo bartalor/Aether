@@ -1,17 +1,31 @@
 #pragma once
 
 // Shared infrastructure for all Aether benchmarks.
-// Provides daemon lifecycle and command-line argument parsing.
+// Provides daemon lifecycle, timing, and command-line argument parsing.
 
 #include "aether/control.h"
 
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
+#include <vector>
+
+// ---------------------------------------------------------------------------
+// Timing
+// ---------------------------------------------------------------------------
+
+static inline uint64_t now_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ULL
+         + static_cast<uint64_t>(ts.tv_nsec);
+}
 
 // ---------------------------------------------------------------------------
 // Daemon lifecycle
