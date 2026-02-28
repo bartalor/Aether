@@ -50,3 +50,15 @@ a `MINOR` project version bump and a prominent `CHANGELOG.md` entry.
 This rule generalises to every future component that owns a layout version
 (e.g. WAL format, network protocol). Each is independent and handles its own
 compatibility at runtime.
+
+## Benchmark Runs
+
+Benchmark results in `reports/` are scratch by default. A run is only
+"official" (written via `--record`) when conditions are controlled: dedicated
+hardware, no competing load, pinned CPU frequency, documented environment.
+
+The `bench/` harness currently lives in this repo alongside the library.
+The long-term plan is a separate `aether-benchmarks` companion repo (modelled
+after `aeron-io/benchmarks`) for cross-system comparisons against Aeron and
+other transports. When that split happens, the companion repo's git tag becomes
+the authoritative harness version for any official run.
