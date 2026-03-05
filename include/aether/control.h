@@ -5,6 +5,7 @@
 namespace aether {
 
 constexpr char DAEMON_SOCKET_PATH[] = "/tmp/aetherd.sock";
+constexpr char DAEMON_PID_PATH[]   = "/tmp/aetherd.pid";
 
 constexpr uint32_t MAX_TOPIC_LEN = 64;
 constexpr uint32_t MAX_SHM_NAME_LEN = 64;

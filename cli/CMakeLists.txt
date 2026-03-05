@@ -1,2 +1,3 @@
 # aether-cli — admin tool
-# Sources will be added here as we build them
+add_executable(aether-cli main.cpp)
+target_link_libraries(aether-cli PRIVATE aether rt)

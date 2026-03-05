@@ -1,10 +1,11 @@
 #include "acceptor.h"
 #include "topic_registry.h"
+#include "aether/control.h"
 
 #include <csignal>   // sigaction, sig_atomic_t
-#include <cstdio>    // fprintf
+#include <cstdio>    // fprintf, fopen, fclose
 #include <cstdlib>   // EXIT_FAILURE
-#include <unistd.h>  // sleep
+#include <unistd.h>  // sleep, getpid, unlink
 
 // ---------------------------------------------------------------------------
 // Signal flags
@@ -52,7 +53,14 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    fprintf(stderr, "[aetherd] ready\n");
+    // Write PID file so the CLI can find us.
+    FILE* pf = fopen(aether::DAEMON_PID_PATH, "w");
+    if (pf) {
+        fprintf(pf, "%d", getpid());
+        fclose(pf);
+    }
+
+    fprintf(stderr, "[aetherd] ready (pid %d)\n", getpid());
 
     start_acceptor();
 
@@ -75,6 +83,8 @@ int main() {
 
     stop_acceptor();
     destroy_all_topics();
+
+    unlink(aether::DAEMON_PID_PATH);
 
     fprintf(stderr, "[aetherd] bye\n");
     return 0;
