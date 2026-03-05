@@ -22,6 +22,17 @@ ConsumeResult consume(RingHeader* hdr, void* buf, uint32_t& buf_len, uint64_t& r
         // Message is ready. Copy the payload out.
         const uint32_t msg_len = slot.payload_len;
         memcpy(buf, slot.data, msg_len);
+
+        // Seqlock-style double-check: verify the slot wasn't overwritten
+        // while we were copying. If sequence changed, the publisher lapped
+        // us mid-read and the payload is potentially corrupted.
+        const uint64_t seq_after = slot.sequence.load(std::memory_order_acquire);
+        if (seq_after != seq) {
+            const uint64_t write_seq = hdr->write_seq.load(std::memory_order_relaxed);
+            read_seq = write_seq - hdr->capacity;
+            return ConsumeResult::Lapped;
+        }
+
         buf_len = msg_len;
         ++read_seq;
         return ConsumeResult::Ok;

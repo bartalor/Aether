@@ -25,9 +25,12 @@ bool publish(RingHeader* hdr, const void* data, uint32_t len) {
     Slot* slots = reinterpret_cast<Slot*>(hdr + 1);
     Slot& slot  = slots[seq % hdr->capacity];
 
-    // Write the payload. These writes must complete before the sequence
-    // store below — the sequence is the signal to subscribers that this
-    // slot is ready to read.
+    // Invalidate the slot before writing. Any consumer that loads this
+    // will see 0 < read_seq (since read_seq >= 1) and return Empty.
+    // This is the "write-begin" half of our seqlock — it prevents a
+    // consumer from reading partially written payload.
+    slot.sequence.store(0, std::memory_order_release);
+
     slot.payload_len = len;
     memcpy(slot.data, data, len);
 

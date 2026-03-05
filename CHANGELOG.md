@@ -20,6 +20,18 @@ Versions follow the rules in [VERSIONING.md](VERSIONING.md).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-03-05
+
+### Fixed
+- Ring buffer: TOCTOU race in `consume()` — publisher could overwrite a slot
+  while a subscriber was mid-read, delivering corrupted payload. Fixed with a
+  seqlock: `publish()` now invalidates `slot.sequence` before writing, and
+  `consume()` re-checks `slot.sequence` after copying to detect overwrites.
+
+### Added
+- `test_race_consume`: targeted reproducer for the consume TOCTOU race
+  (fast publisher + slow consumer on a tiny ring, verifies payload integrity)
+
 ## [0.1.0] - 2026-02-27
 
 ### Added

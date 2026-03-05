@@ -25,3 +25,7 @@ target_include_directories(test_stress PRIVATE ${DOCTEST_INCLUDE_DIR})
 target_link_libraries(test_stress PRIVATE aether rt)
 target_compile_definitions(test_stress PRIVATE AETHERD_PATH="$<TARGET_FILE:aetherd>")
 add_dependencies(test_stress aetherd)
+
+# Race condition reproducer: consume() TOCTOU (no daemon needed)
+add_executable(test_race_consume test_race_consume.cpp)
+target_link_libraries(test_race_consume PRIVATE aether rt)
