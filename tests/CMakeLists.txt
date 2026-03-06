@@ -29,3 +29,10 @@ add_dependencies(test_stress aetherd)
 # Race condition reproducer: consume() TOCTOU (no daemon needed)
 add_executable(test_race_consume test_race_consume.cpp)
 target_link_libraries(test_race_consume PRIVATE aether rt)
+
+# TCP transport integration tests
+add_executable(test_tcp test_tcp.cpp)
+target_include_directories(test_tcp PRIVATE ${DOCTEST_INCLUDE_DIR})
+target_link_libraries(test_tcp PRIVATE aether rt)
+target_compile_definitions(test_tcp PRIVATE AETHERD_PATH="$<TARGET_FILE:aetherd>")
+add_dependencies(test_tcp aetherd)

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
+#include <unistd.h>
 
 namespace aether {
 
@@ -27,5 +29,40 @@ struct WireHeader {
 } __attribute__((packed));
 
 static_assert(sizeof(WireHeader) == 5, "WireHeader must be exactly 5 bytes");
+
+// ---------------------------------------------------------------------------
+// IO helpers — read/write exactly `len` bytes (handles short reads/writes)
+// ---------------------------------------------------------------------------
+
+inline bool read_exact(int fd, void* buf, size_t len) {
+    auto* p = static_cast<uint8_t*>(buf);
+    while (len > 0) {
+        ssize_t n = read(fd, p, len);
+        if (n <= 0) return false;
+        p   += n;
+        len -= static_cast<size_t>(n);
+    }
+    return true;
+}
+
+inline bool write_exact(int fd, const void* buf, size_t len) {
+    auto* p = static_cast<const uint8_t*>(buf);
+    while (len > 0) {
+        ssize_t n = write(fd, p, len);
+        if (n <= 0) return false;
+        p   += n;
+        len -= static_cast<size_t>(n);
+    }
+    return true;
+}
+
+inline bool send_msg(int fd, MsgType type, const void* body, uint32_t body_len) {
+    WireHeader hdr{};
+    hdr.msg_type = type;
+    hdr.body_len = body_len;
+    if (!write_exact(fd, &hdr, sizeof(hdr))) return false;
+    if (body_len > 0 && !write_exact(fd, body, body_len)) return false;
+    return true;
+}
 
 } // namespace aether

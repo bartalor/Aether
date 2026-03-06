@@ -1,4 +1,5 @@
 #include "acceptor.h"
+#include "tcp_server.h"
 #include "topic_registry.h"
 #include "aether/control.h"
 
@@ -63,6 +64,7 @@ int main() {
     fprintf(stderr, "[aetherd] ready (pid %d)\n", getpid());
 
     start_acceptor();
+    start_tcp_server();
 
     // ---------------------------------------------------------------------------
     // Main loop — runs until SIGTERM is received
@@ -81,6 +83,7 @@ int main() {
     // ---------------------------------------------------------------------------
     fprintf(stderr, "[aetherd] shutting down\n");
 
+    stop_tcp_server();
     stop_acceptor();
     destroy_all_topics();
 
