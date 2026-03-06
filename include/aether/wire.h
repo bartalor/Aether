@@ -2,7 +2,15 @@
 
 #include <cstdint>
 #include <cstddef>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <unistd.h>
+
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
 
 namespace aether {
 
@@ -63,6 +71,36 @@ inline bool send_msg(int fd, MsgType type, const void* body, uint32_t body_len) 
     if (!write_exact(fd, &hdr, sizeof(hdr))) return false;
     if (body_len > 0 && !write_exact(fd, body, body_len)) return false;
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// TCP connect helper — aborts on failure (fail fast)
+// ---------------------------------------------------------------------------
+
+inline int tcp_connect(const char* host, uint16_t port = DEFAULT_TCP_PORT) {
+    assert(host != nullptr);
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        perror("tcp_connect: socket");
+        std::abort();
+    }
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons(port);
+
+    if (inet_pton(AF_INET, host, &addr.sin_addr) != 1) {
+        fprintf(stderr, "tcp_connect: invalid address: %s\n", host);
+        std::abort();
+    }
+
+    if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        perror("tcp_connect: connect");
+        std::abort();
+    }
+
+    return fd;
 }
 
 } // namespace aether

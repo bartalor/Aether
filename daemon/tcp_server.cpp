@@ -55,62 +55,61 @@ static void forward_messages(int fd, aether::RingHeader* hdr) {
 // Handle one client connection
 // ---------------------------------------------------------------------------
 
+// Read one wire message from fd. Returns false on disconnect or invalid message.
+static bool read_wire_msg(int fd, aether::WireHeader& whdr, uint8_t* body, size_t body_cap) {
+    if (!read_exact(fd, &whdr, sizeof(whdr)))
+        return false;
+    if (whdr.body_len > body_cap)
+        return false;
+    if (whdr.body_len > 0 && !read_exact(fd, body, whdr.body_len))
+        return false;
+    return true;
+}
+
+static void handle_publish(const uint8_t* body, uint32_t body_len) {
+    if (body_len < 4) return;
+    uint32_t topic_len;
+    std::memcpy(&topic_len, body, 4);
+    if (4 + topic_len > body_len) return;
+
+    const char* topic_name = reinterpret_cast<const char*>(body + 4);
+    const uint8_t* payload = body + 4 + topic_len;
+    const uint32_t payload_len = body_len - 4 - topic_len;
+
+    const TopicInfo* topic = get_or_create_topic(topic_name, topic_len);
+    if (topic) {
+        aether::publish(topic->hdr, payload, payload_len);
+    }
+}
+
+static void handle_subscribe(int fd, const uint8_t* body, uint32_t body_len) {
+    const TopicInfo* topic = get_or_create_topic(
+        reinterpret_cast<const char*>(body), body_len);
+    if (!topic) return;
+    forward_messages(fd, topic->hdr);
+}
+
 static void handle_tcp_client(int fd) {
-    aether::RingHeader* subscribed_ring = nullptr;
+    constexpr size_t MAX_BODY = aether::SLOT_DATA_SIZE + aether::MAX_TOPIC_LEN + 4;
+    uint8_t body[MAX_BODY];
+    aether::WireHeader whdr{};
 
-    while (g_running.load(std::memory_order_relaxed)) {
-        // Read wire header
-        aether::WireHeader whdr{};
-        if (!read_exact(fd, &whdr, sizeof(whdr)))
-            break; // client disconnected
+    // Read first message to determine client type
+    if (!read_wire_msg(fd, whdr, body, MAX_BODY)) {
+        close(fd);
+        return;
+    }
 
-        // Read body
-        if (whdr.body_len > aether::SLOT_DATA_SIZE + aether::MAX_TOPIC_LEN + 4) {
-            break; // sanity check — body too large
-        }
-
-        uint8_t body[aether::SLOT_DATA_SIZE + aether::MAX_TOPIC_LEN + 4];
-        if (whdr.body_len > 0 && !read_exact(fd, body, whdr.body_len))
-            break;
-
-        switch (whdr.msg_type) {
-        case aether::MsgType::Subscribe: {
-            // body = topic name
-            const TopicInfo* topic = get_or_create_topic(
-                reinterpret_cast<const char*>(body), whdr.body_len);
-            if (!topic) {
-                close(fd);
-                return;
-            }
-            subscribed_ring = topic->hdr;
-            // Enter forwarding mode — blocks until disconnect or shutdown
-            forward_messages(fd, subscribed_ring);
-            close(fd);
-            return;
-        }
-
-        case aether::MsgType::Publish: {
-            // body = topic_len(4) + topic + payload
-            if (whdr.body_len < 4) break;
-            uint32_t topic_len;
-            std::memcpy(&topic_len, body, 4);
-            if (4 + topic_len > whdr.body_len) break;
-
-            const char* topic_name = reinterpret_cast<const char*>(body + 4);
-            const uint8_t* payload = body + 4 + topic_len;
-            const uint32_t payload_len = whdr.body_len - 4 - topic_len;
-
-            const TopicInfo* topic = get_or_create_topic(topic_name, topic_len);
-            if (topic) {
-                aether::publish(topic->hdr, payload, payload_len);
-            }
-            break;
-        }
-
-        case aether::MsgType::Message:
-            // Clients shouldn't send this — ignore
-            break;
-        }
+    if (whdr.msg_type == aether::MsgType::Subscribe) {
+        // Subscriber: forward ring messages until disconnect
+        handle_subscribe(fd, body, whdr.body_len);
+    } else if (whdr.msg_type == aether::MsgType::Publish) {
+        // Publisher: handle messages until disconnect
+        do {
+            handle_publish(body, whdr.body_len);
+            if (!g_running.load(std::memory_order_relaxed)) break;
+            if (!read_wire_msg(fd, whdr, body, MAX_BODY)) break;
+        } while (whdr.msg_type == aether::MsgType::Publish);
     }
 
     close(fd);
